@@ -1,9 +1,14 @@
 import pygame
 from pygame.locals import *
+import domobject
 from player import Player
 from pygame.math import Vector2
 
 import pytmx
+from staceyobject import StaceyObject
+from domobject import DomObject
+import text
+from visibleobject import VisibleObject
 
 
 DISP_WIDTH=160
@@ -13,6 +18,11 @@ DISP_SCALE_Y=2
 FPS=50
 
 class App:
+
+    objects:list[pytmx.TiledObject]
+    visibleobjects:list[VisibleObject]
+
+
     def __init__(self):
         self._running = True
         self._display_surf = None
@@ -33,7 +43,9 @@ class App:
         pygame.draw.ellipse(pms, (0,0,0), pygame.Rect(0,16,16,8))
         playermask = pygame.mask.from_surface(pms)
         
-        self.player = Player(self.ishchar_tiles,Vector2(64,168), playermask)
+        self.player = Player(self.ishchar_tiles,Vector2(64,168), playermask, (16, 24))
+
+        self.text = None
 
         self.loadmap("ishnew")
         self.aniframe = 0
@@ -57,6 +69,20 @@ class App:
         coll_surf = pygame.Surface((self.scenewidth_px, self.sceneheight_px), pygame.SRCALPHA)
 
         self.objects = self.tmxdata.layers[3]
+
+        self.visibleobjects = []
+
+        for o in self.objects:
+            if o.visible:
+                if o.type == "stacey":
+                    self.visibleobjects.append(
+                        StaceyObject(self.tmxdata.get_tile_image_by_gid(o.gid), (o.x, o.y), (o.width, o.height))
+                    )
+                elif o.type == "dom":
+                    self.visibleobjects.append(
+                        DomObject(self.tmxdata.get_tile_image_by_gid(o.gid), (o.x, o.y), (o.width, o.height))
+                    )
+
         for x,y,gid, in self.tmxdata.layers[0]:
             tile = self.tmxdata.get_tile_image_by_gid(gid)
             if tile:
@@ -94,6 +120,8 @@ class App:
                 self.playerMoveVector.y = 1
             elif event.key == pygame.K_UP:
                 self.playerMoveVector.y = -1
+            elif event.key == pygame.K_SPACE:
+                self.fire = True
         elif event.type == pygame.KEYUP:
             if event.key == pygame.K_ESCAPE:
                 self.running = False
@@ -107,8 +135,19 @@ class App:
                 self.playerMoveVector.y = 0
 
     def on_loop(self):
-        self.bump = self.player.update(self.playerMoveVector, self.coll_mask)
-        self.clock.tick(FPS)      
+        if not self.text:
+            self.bump = self.player.update(self.playerMoveVector, self.coll_mask)
+
+        if self.fire:
+            if self.text:
+                self.text = None
+            else:
+                r = self.player.get_interact_rect()
+                for io in [x for x in self.visibleobjects if x.rect.colliderect(r)]:
+                    t = io.talk()
+                    if t:
+                        self.text = text.Text(t, 24, (100, 100))
+
 
         p_rect = pygame.Rect(self.player.position.x, self.player.position.y, self.tilewidth_px, self.tileheight_px)
         for o in self.objects:
@@ -122,6 +161,8 @@ class App:
                     self.player.position.x = int(dest_x)*self.tilewidth_px
                     self.player.position.y = int(dest_y)*self.tileheight_px
                     print("teleport")
+
+        self.clock.tick(FPS)      
 
 
     def on_render(self):
@@ -143,7 +184,13 @@ class App:
         self.buffer_surf.fill((128,100,0), Rect(0,0,DISP_WIDTH, DISP_HEIGHT))
         self.buffer_surf.blit(self.back_surf, -viewoffset)
         self.buffer_surf.blit(self.under_surf, -viewoffset)
-        self.player.render(self.buffer_surf, viewoffset)
+       
+        ll:list[VisibleObject]
+        ll = self.visibleobjects + [self.player]
+        ll.sort(key = lambda x: (x.position[1], x.position[0]))
+       
+        for vo in ll:
+            vo.render(self.buffer_surf, viewoffset)
         self.buffer_surf.blit(self.over_surf, -viewoffset)
         
 #        yy = ((self.player.position.y + 20) // self.tileheight_px) * self.tileheight_px
@@ -154,6 +201,9 @@ class App:
             t2 = self.coll_mask.to_surface(setcolor=(128,128,0,128), unsetcolor=None)
             self.buffer_surf.blit(t2, -viewoffset)
             self.buffer_surf.blit(t, self.player.position - viewoffset)
+
+        if self.text:
+            self.text.render(self.buffer_surf, (10, 30))
 
         pygame.transform.scale(self.buffer_surf, self.scaled_size, self._display_surf)
         pygame.display.flip()
@@ -168,6 +218,7 @@ class App:
             self._running = False
  
         while( self._running ):
+            self.fire = False
             for event in pygame.event.get():
                 self.on_event(event)
             self.on_loop()

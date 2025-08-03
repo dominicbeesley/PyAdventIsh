@@ -1,14 +1,16 @@
 import pygame
 from pygame.locals import *
 from pygame.math import Vector2
+from renderable import Renderable
 
-class Player:
-    def __init__(self, tiles:pygame.Surface, position:Vector2, collmask:pygame.mask):
+class Player(Renderable):
+    def __init__(self, tiles:pygame.Surface, position:Vector2, collmask:pygame.mask, size:Vector2):
         self.tiles = tiles
         self.position = position
-        self.orientation = Vector2(0,0)
+        self.orientation = Vector2(0,1)
         self.aniframe = 0
         self.collmask = collmask
+        self.size = size
 
     def render(self, dest_surf, viewoffset:Vector2):
 
@@ -23,6 +25,23 @@ class Player:
             r = 3
 
         dest_surf.blit(self.tiles, self.position - viewoffset, pygame.Rect(((self.aniframe // 5) % 4)*16, 6 + r * 32, 16, 24))
+
+    @staticmethod
+    def rr(x,y,w,h):
+        if w < 0:
+            x = x + w
+            w = -w
+        if h < 0:
+            y = y + h
+            h = -h
+        return Rect(x,y,w,h)
+
+    def get_interact_rect(self) -> pygame.Rect:
+        if self.orientation.y != 0:
+            return Player.rr(self.position.x, self.position.y + self.size[1] // 2, self.size[0], self.size[1] * self.orientation.y)
+        else:
+            return Player.rr(self.position.x + self.size[0] // 2, self.position.y, self.size[0] * self.orientation.x, self.size[1])
+        
 
     def update(self, moveVector: Vector2, scene_collmask:pygame.mask) -> bool:
         new_position = self.position + moveVector
