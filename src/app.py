@@ -1,6 +1,7 @@
 import pygame
 from pygame.locals import *
-import domobject
+from gamestate import GameState
+from objectfactory import ObjectFactory
 from player import Player
 from pygame.math import Vector2
 
@@ -21,7 +22,7 @@ class App:
 
     objects:list[pytmx.TiledObject]
     visibleobjects:list[VisibleObject]
-
+    gamestate:GameState
 
     def __init__(self):
         self._running = True
@@ -29,6 +30,7 @@ class App:
         self.buffer_size = self.buffer_width, self.buffer_height = DISP_WIDTH, DISP_HEIGHT
         self.scaled_size = self.scaled_width, self.scaled_height = DISP_WIDTH*DISP_SCALE_X, DISP_HEIGHT*DISP_SCALE_Y
         self.playerMoveVector = Vector2()
+        self.gamestate = GameState()
 
  
     def on_init(self):
@@ -71,17 +73,23 @@ class App:
         self.objects = self.tmxdata.layers[3]
 
         self.visibleobjects = []
+        self.invisibleobjects = []
 
         for o in self.objects:
             if o.visible:
-                if o.type == "stacey":
-                    self.visibleobjects.append(
-                        StaceyObject(self.tmxdata.get_tile_image_by_gid(o.gid), (o.x, o.y), (o.width, o.height))
+                nobj = ObjectFactory.Create(
+                    self.gamestate,
+                    o.type, 
+                    o.properties, 
+                    self.tmxdata.get_tile_image_by_gid(o.gid), 
+                    (o.x, o.y), 
+                    (o.width, o.height)
                     )
-                elif o.type == "dom":
-                    self.visibleobjects.append(
-                        DomObject(self.tmxdata.get_tile_image_by_gid(o.gid), (o.x, o.y), (o.width, o.height))
-                    )
+                if nobj:
+                    if nobj.enabled:
+                        self.visibleobjects.append(nobj)
+                    else:
+                        self.invisibleobjects.append(nobj)
 
         for x,y,gid, in self.tmxdata.layers[0]:
             tile = self.tmxdata.get_tile_image_by_gid(gid)
@@ -135,6 +143,9 @@ class App:
                 self.playerMoveVector.y = 0
 
     def on_loop(self):
+        
+        self.gamestate.changed = False
+
         if not self.text:
             self.bump = self.player.update(self.playerMoveVector, self.coll_mask)
 
@@ -161,6 +172,28 @@ class App:
                     self.player.position.x = int(dest_x)*self.tilewidth_px
                     self.player.position.y = int(dest_y)*self.tileheight_px
                     print("teleport")
+
+        if self.gamestate.changed:
+            #check visible / invisible objects
+            io = []
+            vo = []
+            for o in self.visibleobjects:
+                if not o.enabled:
+                    io.append(o)
+            for o in self.invisibleobjects:
+                if o.enabled:
+                    vo.append(o)
+
+            for o in io:
+                self.visibleobjects.remove(o)
+            for o in vo:
+                self.invisibleobjects.remove(o)
+
+            for o in io:
+                self.invisibleobjects.append(o)
+            for o in vo:
+                self.visibleobjects.append(o)
+
 
         self.clock.tick(FPS)      
 

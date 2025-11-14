@@ -33,3 +33,8 @@ class VisibleObject(Renderable, ABC):
     @abstractmethod
     def talk(self) -> str:
         pass
+
+    @property
+    @abstractmethod
+    def enabled(self) -> bool:
+        pass
